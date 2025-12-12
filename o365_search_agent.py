@@ -19,24 +19,34 @@ from agentlightning import LLM, LitAgent, NamedResources, Trainer, reward, setup
 setup_logging()
 
 # Prompt 模板
-INSTRUCTION_FORMAT = """你是一个 O365 搜索助手。根据用户的问题，调用搜索找到相关文档。
+INSTRUCTION_FORMAT = """You are an O365 search assistant. Based on the user's question, invoke a search to find relevant documents.
 
-你必须先在 <think> </think> 中进行推理分析。
-然后使用 <search>o365_search(query="你的查询关键词")</search> 格式进行搜索。
-搜索结果会返回在 <information> </information> 中。
-找到答案后，在 <answer> </answer> 中给出答案。
+You must first perform reasoning and analysis within `<think></think>`.
 
-重要提示：
-- query 应该是从用户问题中提取的关键搜索词
-- 使用简洁、准确的关键词，去掉无关的词语
-- 可以多次搜索来完善结果
+Then, you must perform the search using the format `<search>o365_search(query="query keywords")</search>`.
 
-示例：
-用户问题: What are the symptoms of diabetes?
-<think>用户想了解糖尿病的症状，我需要搜索相关医学信息</think>
-<search>o365_search(query="diabetes symptoms")</search>
+The search results will be returned in `<information></information>`.
 
-问题："""
+Once an answer is found, provide the answer in `<answer></answer>`.
+
+Important Notes:
+
+- The query should be the key search term extracted from the user's question.
+
+- You can rewrite or rewrite the user's question into a more effective search query.
+
+- Use concise and accurate keywords, removing irrelevant words.
+
+- You can perform multiple searches to refine the results.
+
+Example:
+User Question: What are the symptoms of diabetes?
+
+`<think>User wants to know about the symptoms of diabetes, I need to search for relevant medical information</think>
+
+`<search>o365_search(query="diabetes symptoms")</search>`
+
+Question:"""
 
 
 # ============================================================

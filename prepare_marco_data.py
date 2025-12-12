@@ -116,13 +116,15 @@ def prepare_training_data(
         sample = {
             "qid": qid,
             "question": query_text,
-            "relevant_passages": relevant_passages  # {pid: relevance_score}
+            # 将 dict 转为 JSON 字符串，避免 parquet 处理嵌套类型卡住
+            "relevant_passages": json.dumps(relevant_passages)
         }
         train_data.append(sample)
         
         if max_samples and len(train_data) >= max_samples:
             break
     
+    print(f"Saving {len(train_data)} samples to {output_path}...")
     # 保存为 parquet 格式（和 search_r1 一致）
     df = pd.DataFrame(train_data)
     df.to_parquet(output_path, index=False)
@@ -182,18 +184,27 @@ def main():
     # 打印统计
     print_data_stats(qrels_train)
     
-    # 2. 转换 corpus 格式
-    convert_to_search_r1_corpus(passages, corpus_output)
+    # 2. 转换 corpus 格式（跳过已存在的文件）
+    if os.path.exists(corpus_output):
+        print(f"跳过: {corpus_output} 已存在 ({os.path.getsize(corpus_output) / 1e9:.2f} GB)")
+    else:
+        convert_to_search_r1_corpus(passages, corpus_output)
     
-    # 3. 准备训练数据
-    prepare_training_data(queries_train, qrels_train, train_output)
+    # 3. 准备训练数据（跳过已存在的文件）
+    if os.path.exists(train_output):
+        print(f"跳过: {train_output} 已存在")
+    else:
+        prepare_training_data(queries_train, qrels_train, train_output)
     
-    # 4. 准备开发集（如果有）
+    # 4. 准备开发集（如果有，跳过已存在的文件）
     if os.path.exists(queries_dev_path) and os.path.exists(qrels_dev_path):
-        queries_dev = load_queries(queries_dev_path)
-        qrels_dev = load_qrels(qrels_dev_path)
-        print_data_stats(qrels_dev)
-        prepare_training_data(queries_dev, qrels_dev, dev_output)
+        if os.path.exists(dev_output):
+            print(f"跳过: {dev_output} 已存在")
+        else:
+            queries_dev = load_queries(queries_dev_path)
+            qrels_dev = load_qrels(qrels_dev_path)
+            print_data_stats(qrels_dev)
+            prepare_training_data(queries_dev, qrels_dev, dev_output)
     
     print("\n" + "=" * 50)
     print("数据处理完成！")

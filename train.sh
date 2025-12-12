@@ -2,11 +2,11 @@
 # O365 Search Agent 训练启动脚本
 
 # 配置
-MODEL_PATH="meta-llama/Llama-3.2-3B"  # 或你自己的模型路径
+MODEL_PATH="Qwen/Qwen2.5-7B"  # 推荐：7B 参数量适中，中英文能力强
 DATA_DIR="data"
 
-python -m agentlightning.runner.verl_runner \
-    verl.algorithm.adv_estimator=grpo \
+python -m agentlightning.verl \
+    algorithm.adv_estimator=grpo \
     data.train_files=${DATA_DIR}/marco_train.parquet \
     data.val_files=${DATA_DIR}/marco_dev.parquet \
     data.train_batch_size=256 \
@@ -20,12 +20,12 @@ python -m agentlightning.runner.verl_runner \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.4 \
     actor_rollout_ref.rollout.n=4 \
     actor_rollout_ref.ref.log_prob_micro_batch_size=128 \
-    actor_rollout_ref.actor.ppo_micro_batch_size=64 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=8 \
     algorithm.kl_ctrl.kl_coef=0.001 \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='o365-search-agent' \
-    trainer.experiment_name='grpo-marco-ndcg' \
+    trainer.experiment_name='qwen2.5-7b-grpo-ndcg' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=50 \

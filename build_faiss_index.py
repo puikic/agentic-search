@@ -3,6 +3,7 @@
 构建 MS MARCO 的 FAISS 索引
 
 使用 E5 模型将 passages 编码为向量，并构建 FAISS 索引
+支持多 GPU 并行编码
 """
 
 import argparse
@@ -13,12 +14,13 @@ from typing import List
 import faiss
 import numpy as np
 import torch
+import torch.nn as nn
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
 
 class E5Encoder:
-    """E5 模型编码器"""
+    """E5 模型编码器，支持多 GPU"""
     
     def __init__(self, model_name: str = "intfloat/e5-base-v2", use_fp16: bool = True):
         print(f"Loading E5 model: {model_name}")
@@ -26,11 +28,20 @@ class E5Encoder:
         self.model = AutoModel.from_pretrained(model_name)
         self.model.eval()
         
-        if torch.cuda.is_available():
-            self.model = self.model.cuda()
+        self.num_gpus = torch.cuda.device_count()
+        
+        if self.num_gpus > 0:
             if use_fp16:
                 self.model = self.model.half()
-            print("Using GPU with FP16")
+            
+            if self.num_gpus > 1:
+                # 多 GPU: 使用 DataParallel
+                print(f"Using {self.num_gpus} GPUs with DataParallel")
+                self.model = nn.DataParallel(self.model)
+            else:
+                print("Using 1 GPU with FP16")
+            
+            self.model = self.model.cuda()
         else:
             print("Using CPU (this will be slow!)")
     
@@ -124,8 +135,13 @@ def save_index_and_mapping(index: faiss.Index, docids: List[str], output_dir: st
     os.makedirs(output_dir, exist_ok=True)
     
     # 如果是 GPU 索引，先转回 CPU
-    if hasattr(index, 'index'):
+    try:
+        # 尝试转换 GPU 索引到 CPU
         index = faiss.index_gpu_to_cpu(index)
+        print("Converted GPU index to CPU")
+    except Exception:
+        # 已经是 CPU 索引，不需要转换
+        pass
     
     # 保存 FAISS 索引
     index_path = os.path.join(output_dir, "marco_e5.index")
@@ -144,10 +160,15 @@ def main():
     parser.add_argument("--corpus_path", type=str, default="data/marco-passages.jsonl")
     parser.add_argument("--output_dir", type=str, default="data")
     parser.add_argument("--model_name", type=str, default="intfloat/e5-base-v2")
-    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--batch_size", type=int, default=512,
+                        help="每个 GPU 的 batch size，8 GPU 时总 batch = 512*8=4096")
     parser.add_argument("--max_passages", type=int, default=None,
                         help="最大处理 passage 数，用于测试")
     parser.add_argument("--use_fp16", action="store_true", default=True)
+    parser.add_argument("--save_embeddings", action="store_true", default=True,
+                        help="保存 embeddings 到文件，方便断点续传")
+    parser.add_argument("--load_embeddings", type=str, default=None,
+                        help="从文件加载 embeddings，跳过编码步骤")
     args = parser.parse_args()
     
     # 检查输入文件
@@ -159,16 +180,34 @@ def main():
     # 1. 加载语料库
     docids, texts = load_corpus(args.corpus_path, args.max_passages)
     
-    # 2. 初始化编码器
-    encoder = E5Encoder(args.model_name, args.use_fp16)
+    # 2. 编码或加载 embeddings
+    embeddings_path = os.path.join(args.output_dir, "embeddings.npy")
+    docids_path = os.path.join(args.output_dir, "docids.json")
     
-    # 3. 编码所有 passages
-    print("\nEncoding passages...")
-    embeddings = encoder.encode(texts, batch_size=args.batch_size, is_query=False)
-    print(f"Embeddings shape: {embeddings.shape}")
+    if args.load_embeddings and os.path.exists(args.load_embeddings):
+        # 从文件加载 embeddings（断点续传）
+        print(f"Loading embeddings from {args.load_embeddings}...")
+        embeddings = np.load(args.load_embeddings)
+        print(f"Loaded embeddings shape: {embeddings.shape}")
+    else:
+        # 初始化编码器
+        encoder = E5Encoder(args.model_name, args.use_fp16)
+        
+        # 编码所有 passages
+        print("\nEncoding passages...")
+        embeddings = encoder.encode(texts, batch_size=args.batch_size, is_query=False)
+        print(f"Embeddings shape: {embeddings.shape}")
+        
+        # 保存 embeddings（方便下次直接加载）
+        if args.save_embeddings:
+            print(f"Saving embeddings to {embeddings_path}...")
+            np.save(embeddings_path, embeddings)
+            with open(docids_path, "w") as f:
+                json.dump(docids, f)
+            print("Embeddings saved!")
     
-    # 4. 构建索引
-    index = build_index(embeddings, use_gpu=torch.cuda.is_available())
+    # 4. 构建索引 (用 CPU，避免 GPU 索引保存问题)
+    index = build_index(embeddings, use_gpu=False)
     
     # 5. 保存
     save_index_and_mapping(index, docids, args.output_dir)
