@@ -24,9 +24,8 @@ import pandas as pd
 import requests
 from openai import OpenAI
 
-from agentlightning import LLM, LitAgent, NamedResources, Rollout, configure_logger
-
-setup_logging()
+from agentlightning import LLM, LitAgent, NamedResources, Rollout
+from agentlightning.logging import configure_logger
 
 logger = configure_logger(name=__name__)
 
