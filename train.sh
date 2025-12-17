@@ -11,6 +11,7 @@ python -m agentlightning.verl \
     data.val_files=${DATA_DIR}/marco_dev.parquet \
     data.train_batch_size=256 \
     data.max_prompt_length=1024 \
+    trainer.val_before_train=false \
     data.max_response_length=512 \
     actor_rollout_ref.model.path=${MODEL_PATH} \
     actor_rollout_ref.actor.optim.lr=1e-6 \

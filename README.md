@@ -14,18 +14,21 @@
 
 ```
 o365_search/
-├── download_msmarco.ps1      # 数据下载脚本 (Windows)
-├── download_msmarco.sh       # 数据下载脚本 (Linux/Mac)
-├── prepare_marco_data.py     # 数据预处理
-├── build_faiss_index.py      # 构建 FAISS 索引
-├── retrieval_server.py       # 检索服务 (复用 search_r1)
-├── o365_search_agent.py      # Agent 训练脚本
-└── data/                     # 数据目录 (下载后生成)
-    ├── collection.tsv        # 8.8M passages
-    ├── queries.train.tsv     # 训练查询
-    ├── qrels.train.tsv       # 相关性标注 (NDCG 关键!)
-    ├── marco-passages.jsonl  # 转换后的 corpus
-    └── marco_train.parquet   # 训练数据
+├── download_msmarco.ps1       # 数据下载脚本 (Windows)
+├── download_msmarco.sh        # 数据下载脚本 (Linux/Mac)
+├── prepare_marco_data.py      # 数据预处理
+├── build_faiss_index.py       # 构建 FAISS 索引
+├── retrieval_server.py        # 检索服务
+├── o365_search_agent.py       # Agent 定义 (NDCG reward)
+├── train_o365_search_agent.py # RL 训练脚本
+├── train.sh                   # 训练启动脚本
+└── data/                      # 数据目录 (下载后生成)
+    ├── collection.tsv         # 8.8M passages
+    ├── queries.train.tsv      # 训练查询
+    ├── qrels.train.tsv        # 相关性标注 (NDCG 关键!)
+    ├── marco-passages.jsonl   # 转换后的 corpus
+    ├── marco_e5.index         # FAISS 索引
+    └── marco_train.parquet    # 训练数据
 ```
 
 ## 快速开始
@@ -81,7 +84,7 @@ python build_faiss_index.py
 python retrieval_server.py \
     --index_path data/marco_e5.index \
     --corpus_path data/marco-passages.jsonl \
-    --topk 10 \
+    --topk 5 \
     --retriever_name e5 \
     --retriever_model intfloat/e5-base-v2
 ```
@@ -92,10 +95,13 @@ python retrieval_server.py \
 # 先启动 Ray
 bash ../../scripts/restart_ray.sh
 
-# 启动 Agent
-python o365_search_agent.py
+# 方法 1: 使用 Python 脚本训练（推荐）
+python train_o365_search_agent.py qwen    # Qwen2.5-7B
+python train_o365_search_agent.py qwen3b  # Qwen2.5-3B (资源有限)
+python train_o365_search_agent.py llama   # LLaMA-3.2-3B
+python train_o365_search_agent.py fast    # 快速测试
 
-# 另一个终端启动 VERL 训练服务
+# 方法 2: 使用 shell 脚本
 bash train.sh
 ```
 
