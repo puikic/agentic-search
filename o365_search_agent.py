@@ -20,13 +20,18 @@ import re
 import time
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, cast
 
+import logging
+
 import pandas as pd
 import requests
 from openai import OpenAI
 
 from agentlightning import LLM, LitAgent, NamedResources, Rollout
-from agentlightning.logging import configure_logger
+from agentlightning.logging import configure_logger, setup
 
+# 同时输出到控制台和文件，便于回溯每个 rollout 的 reward / query / docids
+LOG_FILE_PATH = os.path.join("logs", "o365_rollouts.log")
+setup(level=logging.INFO, files=LOG_FILE_PATH, console=True, color=False)
 logger = configure_logger(name=__name__)
 
 # O365 Search Agent 的系统提示
@@ -42,7 +47,7 @@ Once an answer is found, provide the answer in <answer></answer>.
 
 Important Notes:
 - The query should be the key search term extracted from the user's question.
-- You can rewrite the user's question into a more effective search query.
+- You can rewrite a user's question into a more efficient search query, but you must ensure that the original meaning is not changed..
 - Use concise and accurate keywords, removing irrelevant words.
 - You can perform multiple searches to refine the results.
 
@@ -210,6 +215,15 @@ def execute_response(
             search_result, retrieved_docids = retrieve_doc(content, topk=topk)
             # 计算 NDCG
             ndcg_score = compute_ndcg(retrieved_docids, relevant_passages, k=topk)
+            # 记录本次搜索的检索 docid 和相关 docid，便于排查为什么得到当前 NDCG
+            relevant_docids = list(relevant_passages.keys())
+            logger.info(
+                "[Search] query=%s ndcg=%.4f retrieved_topk=%s relevant=%s",
+                content,
+                ndcg_score,
+                retrieved_docids,
+                relevant_docids,
+            )
             return f"\n\n<information>{search_result}</information>\n\n", ndcg_score
         else:
             return "", 0.0
@@ -273,6 +287,7 @@ class O365SearchAgent(LitAgent[Dict[str, Any]]):
         rollout_id = rollout.rollout_id
         logger.info(f"[Rollout {rollout_id}] Question: {task['question']}")
         logger.info(f"[Rollout {rollout_id}] Relevant passages: {len(relevant_passages)} docs")
+        logger.info(f"[Rollout {rollout_id}] Prompt(head): {prompt[:500]}")
 
         start_time = time.time()
         llm: LLM = cast(LLM, resources["main_llm"])

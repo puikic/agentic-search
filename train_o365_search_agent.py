@@ -42,7 +42,7 @@ RL_TRAINING_CONFIG: Dict[str, Any] = {
     "data": {
         "train_files": "data/marco_train.parquet",
         "val_files": "data/marco_dev.parquet",
-        "train_batch_size": 256,
+        "train_batch_size": 192,
         "max_prompt_length": 2048,
         "max_response_length": 1024,
         "truncation": "error",
@@ -50,11 +50,11 @@ RL_TRAINING_CONFIG: Dict[str, Any] = {
     "actor_rollout_ref": {
         "rollout": {
             "tensor_model_parallel_size": 1,
-            "n": 4,  # 每个 prompt 生成 4 个样本
+            "n": 3,  # 每个 prompt 生成 3 个样本，兼顾吞吐与多样性
             "log_prob_micro_batch_size_per_gpu": 4,
             "multi_turn": {"format": "hermes"},
             "name": "vllm",
-            "gpu_memory_utilization": 0.5,
+            "gpu_memory_utilization": 0.9,
             "engine_kwargs": {
                 "vllm": {
                     "enable_auto_tool_choice": True,
@@ -98,7 +98,7 @@ RL_TRAINING_CONFIG: Dict[str, Any] = {
         "test_freq": 10,
         "save_freq": 10,
         "total_epochs": 10,
-        "total_training_steps": 200,
+        "total_training_steps": 2000,
         "default_local_dir": "checkpoints/o365_search_checkpoints/",
     },
 }
@@ -175,7 +175,7 @@ def train(config: Dict[str, Any]) -> None:
     algorithm = agl.VERL(config)
 
     # 创建 Trainer
-    trainer = agl.Trainer(n_runners=32, algorithm=algorithm)
+    trainer = agl.Trainer(n_runners=16, algorithm=algorithm)
 
     # 加载数据
     train_data_path = config["data"]["train_files"]
