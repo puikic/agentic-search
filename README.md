@@ -28,7 +28,8 @@ o365_search/
     ├── qrels.train.tsv        # 相关性标注 (NDCG 关键!)
     ├── marco-passages.jsonl   # 转换后的 corpus
     ├── marco_e5.index         # FAISS 索引
-    └── marco_train.parquet    # 训练数据
+    ├── marco_train.parquet    # 训练数据 	502,939 条
+    └── marco_dev.parquet      # 测试数据 	55,578 条
 ```
 
 ## 快速开始
