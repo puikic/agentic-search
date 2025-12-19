@@ -196,7 +196,9 @@ def train(config: Dict[str, Any]) -> None:
     else:
         # 如果没有验证集，使用训练集的前 1000 条
         val_data = train_data[:1000]
-        print(f"No validation data found, using {len(val_data)} samples from training set")
+        train_data = train_data[1000:]  # ← 训练集要去掉这 1000 条
+        print(f"No validation data found, split from training set: "
+        f"{len(train_data)} train, {len(val_data)} val")
 
     # 开始训练
     trainer.fit(agent, train_dataset=train_data, val_dataset=val_data)  # type: ignore[arg-type]
