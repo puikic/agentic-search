@@ -33,7 +33,7 @@ from o365_search_agent import O365SearchAgent
 
 import agentlightning as agl
 
-# 基础训练配置
+# 基础训练配置（参考 Search-R1 项目调优）
 RL_TRAINING_CONFIG: Dict[str, Any] = {
     "algorithm": {
         "adv_estimator": "grpo",
@@ -42,7 +42,7 @@ RL_TRAINING_CONFIG: Dict[str, Any] = {
     "data": {
         "train_files": "data/marco_train.parquet",
         "val_files": "data/marco_dev.parquet",
-        "train_batch_size": 192,
+        "train_batch_size": 256,  # 增大 batch size，提高训练效率
         "max_prompt_length": 2048,
         "max_response_length": 1024,
         "truncation": "error",
@@ -54,7 +54,7 @@ RL_TRAINING_CONFIG: Dict[str, Any] = {
             "log_prob_micro_batch_size_per_gpu": 4,
             "multi_turn": {"format": "hermes"},
             "name": "vllm",
-            "gpu_memory_utilization": 0.9,
+            "gpu_memory_utilization": 0.6,
             "engine_kwargs": {
                 "vllm": {
                     "enable_auto_tool_choice": True,
@@ -89,16 +89,16 @@ RL_TRAINING_CONFIG: Dict[str, Any] = {
     },
     "trainer": {
         "n_gpus_per_node": 8,
-        "val_before_train": True,
+        "val_before_train": False,  # 跳过训练前验证，直接开始训练
         "critic_warmup": 0,
         "logger": ["console", "wandb"],
         "project_name": "O365SearchAgent",
         "experiment_name": "o365_search_ndcg",
         "nnodes": 1,
-        "test_freq": 10,
-        "save_freq": 10,
+        "test_freq": 20,  # 每 20 步验证一次，减少验证开销
+        "save_freq": 20,
         "total_epochs": 10,
-        "total_training_steps": 2000,
+        "total_training_steps": 500,  # 参考 Search-R1，Agentic RL 不需要太多步
         "default_local_dir": "checkpoints/o365_search_checkpoints/",
     },
 }
@@ -174,8 +174,8 @@ def train(config: Dict[str, Any]) -> None:
     # 创建 VERL 算法
     algorithm = agl.VERL(config)
 
-    # 创建 Trainer
-    trainer = agl.Trainer(n_runners=16, algorithm=algorithm)
+    # 创建 Trainer（参考 Search-R1 使用 32 runners 加速 rollout）
+    trainer = agl.Trainer(n_runners=32, algorithm=algorithm)
 
     # 加载数据
     train_data_path = config["data"]["train_files"]
@@ -192,11 +192,17 @@ def train(config: Dict[str, Any]) -> None:
 
     if os.path.exists(val_data_path):
         val_data = pd.read_parquet(val_data_path).to_dict(orient="records")  # type: ignore[call-overload]
-        print(f"Loaded {len(val_data)} validation samples")
+        print(f"Loaded {len(val_data)} validation samples from file")
+        # 限制验证集大小：Agentic RL 每个 rollout 耗时较长（~2分钟），
+        # 参考 Search-R1 项目，验证集保持在 500-1000 条即可
+        max_val_samples = 500
+        if len(val_data) > max_val_samples:
+            val_data = val_data[:max_val_samples]
+            print(f"Truncated validation set to {max_val_samples} samples for efficiency")
     else:
-        # 如果没有验证集，使用训练集的前 1000 条
-        val_data = train_data[:1000]
-        train_data = train_data[1000:]  # ← 训练集要去掉这 1000 条
+        # 如果没有验证集，使用训练集的前 500 条
+        val_data = train_data[:500]
+        train_data = train_data[500:]  # ← 训练集要去掉这 500 条
         print(f"No validation data found, split from training set: "
         f"{len(train_data)} train, {len(val_data)} val")
 
